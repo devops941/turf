@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Poppins, Inter, Manrope } from "next/font/google";
+import { Poppins, Inter, Manrope, Anton, Archivo, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { ToastProvider } from "@/components/Toast";
@@ -21,6 +21,24 @@ const manrope = Manrope({
   variable: "--font-manrope",
   display: "swap",
 });
+// Landing-page poster system (scoped to `.text-poster` / `.eyebrow`).
+const anton = Anton({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-anton",
+  display: "swap",
+});
+const archivo = Archivo({
+  subsets: ["latin"],
+  variable: "--font-archivo",
+  display: "swap",
+});
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "TurfHub - Book Sports Turfs Near You",
@@ -30,7 +48,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${inter.variable} ${manrope.variable}`}>
+    <html
+      lang="en"
+      className={`${poppins.variable} ${inter.variable} ${manrope.variable} ${anton.variable} ${archivo.variable} ${spaceMono.variable}`}
+    >
       <body>
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>

@@ -8,6 +8,26 @@
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-numeric: var(--font-manrope), system-ui, sans-serif;
 
+  /* Landing-page poster system */
+  --font-poster: var(--font-anton), "Arial Narrow", sans-serif;
+  --font-grotesk: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, monospace;
+
+  /* Ink (night) + volt (floodlight lime) + flame (coral) */
+  --color-ink-950: #060908;
+  --color-ink-900: #0b1210;
+  --color-ink-800: #121b18;
+  --color-ink-700: #1b2723;
+  --color-volt-200: #ecffc0;
+  --color-volt-300: #ddff8a;
+  --color-volt-400: #c6f24e;
+  --color-volt-500: #aee23a;
+  --color-volt-600: #8fc320;
+  --color-flame-300: #ffa88f;
+  --color-flame-400: #ff7a5c;
+  --color-flame-500: #ff5a36;
+  --color-flame-600: #e8431f;
+
   --color-brand-50: #f0fdf4;
   --color-brand-100: #dcfce7;
   --color-brand-200: #bbf7d0;
@@ -39,6 +59,9 @@
   --animate-marquee: marquee 32s linear infinite;
   --animate-float: float 7s ease-in-out infinite;
   --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
+  --animate-scan: scan 6s linear infinite;
+  --animate-ticker: ticker 26s linear infinite;
+  --animate-spin-slow: spin 14s linear infinite;
 }
 
 @keyframes fade-up {
@@ -82,6 +105,33 @@
   }
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes sweep {
+  from {
+    background-position: 160% 50%;
+  }
+  to {
+    background-position: -60% 50%;
   }
 }
 
@@ -153,11 +203,68 @@ body {
   }
 }
 
+/* ------------------------------ landing (Night Match Editorial) --------- */
+@utility grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@utility text-poster {
+  font-family: var(--font-poster);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 0.86;
+  text-transform: uppercase;
+}
+
+@utility text-outline {
+  color: transparent;
+  -webkit-text-stroke: 1.5px currentColor;
+  paint-order: stroke fill;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+@utility link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  transition: background-size 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+  &:hover {
+    background-size: 100% 1px;
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+}
+.reveal.is-in {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-marquee,
   .animate-float,
-  .animate-fade-up {
+  .animate-fade-up,
+  .animate-scan,
+  .animate-ticker,
+  .animate-spin-slow {
     animation: none !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
   }
 }
 

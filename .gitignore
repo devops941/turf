@@ -12,6 +12,8 @@ venv/
 
 # Prisma generated client (regenerated via `prisma generate`)
 prisma/__pycache__/
+# Locally fetched Prisma query-engine binary (see AGENTS.md)
+prisma-query-engine-*
 
 # Node / Next.js
 node_modules/
