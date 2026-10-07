@@ -25,20 +25,45 @@ frontend/   Next.js app (UI)
 backend/    FastAPI app (API, Prisma schema, services)
 ```
 
+## Prerequisites
+
+- **Python 3.11+** (tested on 3.13)
+- **Node.js 20.9+** (tested on 24; required by Next.js 16)
+- A **MongoDB** database (local `mongodb://127.0.0.1:27017` or a MongoDB Atlas connection string)
+
 ## Backend setup
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-prisma generate
+cp .env.example .env               # then edit DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY
+prisma generate                    # generate the Prisma Python client
+python -m app.seed                 # create admin, sample owners, venues, slots
 uvicorn app.main:app --reload --port 8000
 ```
+
+Backend runs at `http://localhost:8000` (interactive docs at `/docs`).
+
+Seeded logins: `admin@crm.local / Admin@123`, `owner@turf.local / Owner@123`, `player@turf.local / Player@123`.
 
 ## Frontend setup
 
 ```bash
 cd frontend
 npm install
+# create .env.local with the API URL:
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 npm run dev
 ```
+
+Frontend runs at `http://localhost:3000`.
+
+For a production build:
+
+```bash
+npm run build
+npm run start
+```
+
