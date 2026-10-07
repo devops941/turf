@@ -1,0 +1,228 @@
+// Turf Booking Platform - Prisma schema (MongoDB)
+// NOTE: The MongoDB connector does not support `enum`; role/status fields are
+// stored as strings and validated in the application layer (see app/constants.py).
+
+generator client {
+  provider = "prisma-client-py"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- users
+model User {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String   @map("password_hash")
+  role         String // ADMIN | VENUE_OWNER | USER
+  status       String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  venues   Venue[]
+  bookings Booking[]
+  reviews  Review[]
+
+  @@index([role])
+  @@map("users")
+}
+
+// --------------------------------------------------------------- venues
+model Venue {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId     String   @map("owner_id") @db.ObjectId
+  name        String
+  description String?
+  sportTypes  String[] @map("sport_types")
+  address     String
+  city        String
+  state       String?
+  pincode     String?
+  latitude    Float?
+  longitude   Float?
+  images      String[]
+  amenities   String[]
+  openTime    String   @map("open_time") // "06:00"
+  closeTime   String   @map("close_time") // "23:00"
+  basePrice   Float    @map("base_price")
+  rating      Float    @default(0)
+  reviewCount Int      @default(0) @map("review_count")
+  status      String   @default("PENDING") // PENDING | APPROVED | SUSPENDED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner        User          @relation(fields: [ownerId], references: [id])
+  slots        Slot[]
+  bookings     Booking[]
+  reviews      Review[]
+  splitSetting SplitSetting?
+
+  @@index([city])
+  @@index([status])
+  @@map("venues")
+}
+
+// ---------------------------------------------------------------- slots
+model Slot {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  venueId   String    @map("venue_id") @db.ObjectId
+  date      String // "YYYY-MM-DD" (local calendar day of the venue)
+  startTime String    @map("start_time") // "18:00"
+  endTime   String    @map("end_time") // "19:00"
+  price     Float
+  status    String    @default("OPEN") // OPEN | HELD | BOOKED | BLOCKED
+  heldUntil DateTime? @map("held_until")
+  heldBy    String?   @map("held_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  venue    Venue     @relation(fields: [venueId], references: [id])
+  bookings Booking[]
+
+  @@unique([venueId, date, startTime])
+  @@index([venueId, date])
+  @@index([status])
+  @@map("slots")
+}
+
+// ------------------------------------------------------------- bookings
+model Booking {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @map("user_id") @db.ObjectId
+  venueId         String   @map("venue_id") @db.ObjectId
+  slotId          String   @map("slot_id") @db.ObjectId
+  orderId         String   @unique @map("order_id")
+  amount          Float
+  splitPercentage Float    @map("split_percentage")
+  status          String   @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED | REFUNDED
+  holdExpiresAt   DateTime? @map("hold_expires_at")
+  confirmedAt     DateTime? @map("confirmed_at")
+  cancelledAt     DateTime? @map("cancelled_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  venue       Venue       @relation(fields: [venueId], references: [id])
+  slot        Slot        @relation(fields: [slotId], references: [id])
+  transaction Transaction?
+  payouts     Payout[]
+  review      Review?
+
+  @@index([userId])
+  @@index([venueId])
+  @@index([status])
+  @@map("bookings")
+}
+
+// -------------------------------------------------------- gateway_config
+model GatewayConfig {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  provider          String   @default("RAZORPAY") // RAZORPAY | STRIPE | CASHFREE | SANDBOX
+  apiKey            String   @map("api_key") // public key
+  secretKeyEnc      String   @map("secret_key_enc") // AES-256-GCM ciphertext
+  webhookSecretEnc  String   @map("webhook_secret_enc") // AES-256-GCM ciphertext
+  webhookUrl        String?  @map("webhook_url")
+  isActive          Boolean  @default(true) @map("is_active")
+  lastTestedAt      DateTime? @map("last_tested_at")
+  lastTestStatus    String?  @map("last_test_status")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("gateway_config")
+}
+
+// --------------------------------------------------------- split_settings
+model SplitSetting {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  scope         String // GLOBAL | VENUE
+  venueId       String?  @unique @map("venue_id") @db.ObjectId
+  percentage    Float
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  isActive      Boolean  @default(true) @map("is_active")
+  changedBy     String?  @map("changed_by")
+  note          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  venue Venue? @relation(fields: [venueId], references: [id])
+
+  @@index([scope])
+  @@map("split_settings")
+}
+
+// ----------------------------------------------------------- transactions
+model Transaction {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId       String   @unique @map("booking_id") @db.ObjectId
+  orderId         String   @map("order_id")
+  amount          Float
+  splitPercentage Float    @map("split_percentage")
+  venueShare      Float    @map("venue_share")
+  adminShare      Float    @map("admin_share")
+  status          String   @default("CAPTURED") // CAPTURED | REFUNDED
+  gatewayPaymentId String? @map("gateway_payment_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  booking Booking  @relation(fields: [bookingId], references: [id])
+  payouts Payout[]
+
+  @@index([status])
+  @@map("transactions")
+}
+
+// ---------------------------------------------------------------- payouts
+model Payout {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  transactionId   String    @map("transaction_id") @db.ObjectId
+  bookingId       String    @map("booking_id") @db.ObjectId
+  beneficiaryType String    @map("beneficiary_type") // VENUE | ADMIN
+  beneficiaryId   String    @map("beneficiary_id") // venue id, or "ADMIN"
+  amount          Float
+  status          String    @default("PENDING") // PENDING | PROCESSING | PAID | FAILED
+  gatewayRef      String?   @map("gateway_ref")
+  settledAt       DateTime? @map("settled_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  booking     Booking     @relation(fields: [bookingId], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([status])
+  @@map("payouts")
+}
+
+// ---------------------------------------------------------------- reviews
+model Review {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  venueId   String   @map("venue_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
+  bookingId String   @unique @map("booking_id") @db.ObjectId
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  venue   Venue   @relation(fields: [venueId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([venueId])
+  @@map("reviews")
+}
+
+// ------------------------------------------------------------- audit_logs
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  actorId   String?  @map("actor_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity])
+  @@map("audit_logs")
+}
