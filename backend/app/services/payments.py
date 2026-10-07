@@ -4,10 +4,17 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from app.config import settings
-from app.constants import BookingStatus, PayoutStatus, SlotStatus, TransactionStatus
+from app.constants import BookingStatus, GatewaySource, PayoutStatus, SlotStatus, TransactionStatus
 from app.database import db
 from app.notifications import notify_booking_confirmed
-from app.services import gateway, gateway_config, payouts, slot_engine, split_engine
+from app.services import (
+    gateway,
+    gateway_config,
+    payouts,
+    slot_engine,
+    split_engine,
+    venue_gateway,
+)
 
 log = logging.getLogger("turf.payments")
 
@@ -40,6 +47,9 @@ async def create_booking(user_id: str, slot_id: str):
         raise BookingError("This slot is no longer available")
 
     split_pct = await split_engine.get_active_split_percentage(venue.id)
+    # Decide where the player will pay: the venue owner's gateway if they have
+    # one configured, otherwise the platform gateway.
+    _, gateway_source = await venue_gateway.resolve_for_venue(venue.id)
     hold_expires = _now() + timedelta(minutes=settings.hold_ttl_minutes)
     order_id = f"ord_{int(_now().timestamp() * 1000)}_{user_id[-6:]}"
 
@@ -51,6 +61,7 @@ async def create_booking(user_id: str, slot_id: str):
             "orderId": order_id,
             "amount": slot.price,
             "splitPercentage": split_pct,
+            "gatewaySource": gateway_source,
             "status": BookingStatus.PENDING,
             "holdExpiresAt": hold_expires,
         }
@@ -59,7 +70,12 @@ async def create_booking(user_id: str, slot_id: str):
 
 
 async def create_gateway_order(booking, venue, slot) -> dict:
-    config = await gateway_config.get_decrypted_secrets()
+    """Create the gateway order the player will pay into.
+
+    Uses the venue owner's gateway when the booking is routed there, so the
+    money lands in the owner's account and the platform share can be split out.
+    """
+    config, gateway_source = await venue_gateway.resolve_for_venue(venue.id)
     order = await gateway.create_order(
         config,
         order_id=booking.orderId,
@@ -70,8 +86,16 @@ async def create_gateway_order(booking, venue, slot) -> dict:
             "slotId": slot.id,
             "bookingId": booking.id,
             "splitPercentage": str(booking.splitPercentage),
+            "gatewaySource": gateway_source,
         },
     )
+    order["gatewaySource"] = gateway_source
+    provider = order.get("provider")
+    if provider and provider != booking.gatewayProvider:
+        await db.booking.update(
+            where={"id": booking.id},
+            data={"gatewayProvider": provider, "gatewaySource": gateway_source},
+        )
     return order
 
 
@@ -102,6 +126,7 @@ async def confirm_booking_payment(
     split_pct = float(fresh.splitPercentage)
     venue_share, admin_share = split_engine.compute_split(amount, split_pct)
 
+    gateway_source = fresh.gatewaySource or GatewaySource.PLATFORM
     transaction = await db.transaction.create(
         data={
             "bookingId": fresh.id,
@@ -110,6 +135,8 @@ async def confirm_booking_payment(
             "splitPercentage": split_pct,
             "venueShare": venue_share,
             "adminShare": admin_share,
+            "gatewaySource": gateway_source,
+            "gatewayProvider": fresh.gatewayProvider,
             "status": TransactionStatus.CAPTURED,
             "gatewayPaymentId": gateway_payment_id,
         }

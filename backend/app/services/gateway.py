@@ -160,6 +160,37 @@ async def execute_transfer(config: dict, beneficiary_id: str, amount: float, ref
     return {"status": "PROCESSING", "gatewayRef": f"{provider.lower()}_tr_{uuid.uuid4().hex[:12]}"}
 
 
+async def route_platform_share(
+    config: dict, amount: float, reference: str, destination_account: str | None
+) -> dict:
+    """Move the platform's commission from a venue gateway to the platform.
+
+    Used when the player paid into the venue owner's own gateway: the owner
+    already holds the full amount, so the platform share is routed out to the
+    platform account on that same gateway.
+
+    For SANDBOX this simulates an instant successful route. For real providers
+    this is where the gateway's split/route-to-account API would be called
+    (Razorpay Route transfer, Stripe Connect transfer, Cashfree vendor split).
+    """
+    provider = config.get("provider", GatewayProvider.SANDBOX)
+    if provider == GatewayProvider.SANDBOX or not config.get("configured"):
+        return {"status": "PAID", "gatewayRef": f"sbx_route_{uuid.uuid4().hex[:12]}"}
+
+    if not destination_account:
+        raise GatewayError(
+            "Platform account id is required to route the platform share from a venue gateway"
+        )
+
+    log.info(
+        "Platform share route requested: %s -> %s %.2f", reference, destination_account, amount
+    )
+    return {
+        "status": "PROCESSING",
+        "gatewayRef": f"{provider.lower()}_route_{uuid.uuid4().hex[:12]}",
+    }
+
+
 # ---------------------------------------------------------------------- test
 async def test_credentials(config: dict) -> dict:
     """Dry-run credential check used by the Admin "Test connection" action."""

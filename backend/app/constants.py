@@ -71,6 +71,15 @@ class GatewayProvider:
     ALL = (RAZORPAY, STRIPE, CASHFREE, SANDBOX)
 
 
+class GatewaySource:
+    """Where the player's money was actually collected."""
+
+    PLATFORM = "PLATFORM"  # paid into the platform's own gateway
+    VENUE = "VENUE"  # paid into the venue owner's gateway
+
+    ALL = (PLATFORM, VENUE)
+
+
 SPORT_TYPES = (
     "Football",
     "Cricket",

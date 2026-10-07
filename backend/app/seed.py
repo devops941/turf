@@ -10,7 +10,7 @@ from app.config import settings
 from app.constants import Role, SlotStatus, UserStatus, VenueStatus
 from app.database import connect_db, db, disconnect_db
 from app.security import hash_password
-from app.services import slot_engine, split_engine
+from app.services import slot_engine, split_engine, venue_gateway
 
 IMG = "https://images.unsplash.com/photo-{}?auto=format&fit=crop&w=1200&q=70"
 
@@ -162,6 +162,23 @@ async def seed():
     cricket = next((v for v in created_venues if v.name == "TurfNation Cricket Hub"), None)
     if cricket:
         await split_engine.set_venue_split(cricket.id, 15.0, admin.id, "partnership rate")
+
+    # Demo: connect the first owner's own gateway on their first venue. Players
+    # pay into it and the platform share is routed out. The other venue keeps
+    # falling back to the platform gateway, so both paths are demonstrable.
+    owner1_venues = [v for v in created_venues if v.ownerId == owner1.id]
+    if owner1_venues:
+        demo_venue = owner1_venues[0]
+        await venue_gateway.upsert_config(
+            demo_venue.id,
+            owner1.id,
+            provider="SANDBOX",
+            api_key="owner_demo_public_key",
+            secret_key="owner_demo_secret_key",
+            webhook_secret="owner_demo_webhook_secret",
+            platform_account_id="platform_demo_account",
+            is_active=True,
+        )
 
     print("\nSeed complete.")
     print(f"  Admin        : {admin.email} / {settings.admin_password}")

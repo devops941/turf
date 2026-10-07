@@ -60,6 +60,7 @@ model Venue {
   bookings     Booking[]
   reviews      Review[]
   splitSetting SplitSetting?
+  gatewayConfig VenueGatewayConfig?
 
   @@index([city])
   @@index([status])
@@ -98,6 +99,8 @@ model Booking {
   orderId         String   @unique @map("order_id")
   amount          Float
   splitPercentage Float    @map("split_percentage")
+  gatewaySource   String   @default("PLATFORM") @map("gateway_source") // PLATFORM | VENUE
+  gatewayProvider String?  @map("gateway_provider")
   status          String   @default("PENDING") // PENDING | CONFIRMED | CANCELLED | COMPLETED | REFUNDED
   holdExpiresAt   DateTime? @map("hold_expires_at")
   confirmedAt     DateTime? @map("confirmed_at")
@@ -135,6 +138,32 @@ model GatewayConfig {
   @@map("gateway_config")
 }
 
+// -------------------------------------------------- venue_gateway_config
+// A venue owner's OWN payment gateway. When active, the player pays into the
+// owner's gateway; the platform share is then routed from that gateway to the
+// platform account. Managed self-serve by the owner.
+model VenueGatewayConfig {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  venueId           String   @unique @map("venue_id") @db.ObjectId
+  ownerId           String   @map("owner_id") @db.ObjectId
+  provider          String   @default("RAZORPAY") // RAZORPAY | STRIPE | CASHFREE | SANDBOX
+  apiKey            String   @map("api_key") // public key
+  secretKeyEnc      String   @map("secret_key_enc") // AES-256-GCM ciphertext
+  webhookSecretEnc  String   @map("webhook_secret_enc") // AES-256-GCM ciphertext
+  webhookUrl        String?  @map("webhook_url")
+  platformAccountId String?  @map("platform_account_id") // platform payout target on this gateway
+  isActive          Boolean  @default(true) @map("is_active")
+  lastTestedAt      DateTime? @map("last_tested_at")
+  lastTestStatus    String?  @map("last_test_status")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  venue Venue @relation(fields: [venueId], references: [id])
+
+  @@index([ownerId])
+  @@map("venue_gateway_config")
+}
+
 // --------------------------------------------------------- split_settings
 model SplitSetting {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -162,6 +191,8 @@ model Transaction {
   splitPercentage Float    @map("split_percentage")
   venueShare      Float    @map("venue_share")
   adminShare      Float    @map("admin_share")
+  gatewaySource   String   @default("PLATFORM") @map("gateway_source") // PLATFORM | VENUE
+  gatewayProvider String?  @map("gateway_provider")
   status          String   @default("CAPTURED") // CAPTURED | REFUNDED
   gatewayPaymentId String? @map("gateway_payment_id")
   createdAt       DateTime @default(now()) @map("created_at")

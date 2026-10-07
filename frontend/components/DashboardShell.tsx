@@ -28,6 +28,7 @@ const OWNER_NAV: NavItem[] = [
   { href: "/owner/venues", label: "My Turfs", icon: Store },
   { href: "/owner/bookings", label: "Bookings", icon: Ticket },
   { href: "/owner/earnings", label: "Earnings", icon: Wallet },
+  { href: "/owner/gateway", label: "Payment Gateway", icon: CreditCard },
 ];
 
 const ADMIN_NAV: NavItem[] = [

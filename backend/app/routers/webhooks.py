@@ -1,8 +1,12 @@
 """Gateway webhook handler.
 
 The gateway POSTs signed events here. We verify the signature against the
-Admin-configured webhook secret and reconcile the booking asynchronously. The
-confirmation itself is idempotent, so replayed callbacks are harmless.
+webhook secret and reconcile the booking asynchronously. The confirmation itself
+is idempotent, so replayed callbacks are harmless.
+
+The signing secret depends on where the player paid: bookings routed to a venue
+owner's own gateway are verified with that venue's webhook secret, everything
+else with the platform secret.
 
 This route is intentionally unauthenticated (gateways cannot present a JWT) and
 is protected purely by signature verification.
@@ -11,11 +15,11 @@ is protected purely by signature verification.
 import json
 import logging
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.constants import BookingStatus
 from app.database import db
-from app.services import gateway, gateway_config, payments
+from app.services import gateway, payments, venue_gateway
 
 log = logging.getLogger("turf.webhook")
 
@@ -27,14 +31,6 @@ async def payment_webhook(request: Request):
     raw_body = await request.body()
     headers = dict(request.headers)
 
-    config = await gateway_config.get_decrypted_secrets()
-    provider = config.get("provider", "SANDBOX")
-    secret = config.get("webhook_secret", "")
-
-    if not gateway.verify_webhook_signature(provider, raw_body, headers, secret):
-        log.warning("Rejected webhook: invalid signature (provider=%s)", provider)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid webhook signature")
-
     try:
         event = json.loads(raw_body.decode("utf-8") or "{}")
     except json.JSONDecodeError as exc:
@@ -45,6 +41,14 @@ async def payment_webhook(request: Request):
 
     if not order_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing order id in event")
+
+    # Choose the secret that matches where this booking's money was collected.
+    resolved = await venue_gateway.resolve_webhook_secret(order_id)
+    provider, secret = resolved if resolved else ("SANDBOX", "")
+
+    if not gateway.verify_webhook_signature(provider, raw_body, headers, secret):
+        log.warning("Rejected webhook: invalid signature (provider=%s)", provider)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid webhook signature")
 
     booking = await db.booking.find_first(where={"orderId": order_id})
     if booking is None:

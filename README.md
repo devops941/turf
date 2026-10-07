@@ -3,8 +3,8 @@
 Turf Booking Platform — a multi-role sports turf booking system (3-sided marketplace).
 
 - **Players (USER)** browse venues, book slots, pay, and review.
-- **Venue Owners (VENUE_OWNER)** manage venues, slots, bookings, and earnings.
-- **Admin (ADMIN)** configures payment gateways, commission splits, and monitors payouts.
+- **Venue Owners (VENUE_OWNER)** manage venues, slots, bookings, earnings, and their own payment gateway.
+- **Admin (ADMIN)** configures the platform payment gateway, commission splits, and monitors payouts.
 
 ## Stack
 
@@ -15,8 +15,26 @@ Turf Booking Platform — a multi-role sports turf booking system (3-sided marke
 ## Key features
 
 - Dynamic payment-gateway configuration (admin-managed provider + credentials)
+- Per-venue payment gateways: owners connect their own credentials, players pay into the owner's gateway, and the platform share is split out automatically
 - Automatic split payouts between venue owners and the platform
-- Webhook-driven payment confirmation
+- Webhook-driven payment confirmation, verified per venue
+
+## How payment routing works
+
+Each venue can either use the **platform gateway** or the owner's **own gateway**:
+
+| Player pays into | Venue share | Platform share |
+| --- | --- | --- |
+| Platform gateway | Transferred out to the owner | Stays with the platform |
+| Owner's own gateway | Already held by the owner | Routed from the owner's gateway to the platform account |
+
+The gateway source is recorded on every booking and transaction, so the payout
+engine always settles from the account that actually holds the money. Venues
+without their own gateway fall back to the platform gateway automatically.
+
+Owners manage this self-serve at `/owner/gateway` (per venue); the admin still
+manages the platform-wide gateway at `/admin/gateway`.
+
 
 ## Project structure
 

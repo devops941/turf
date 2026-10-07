@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.config import settings
 from app.constants import GatewayProvider, PayoutStatus, Role, SplitScope
 from app.database import db
-from app.deps import require_admin, require_owner
+from app.deps import require_admin, require_owner, require_owner_or_admin
 from app.encryption import mask
-from app.schemas import GatewayConfigUpdate, SplitUpdate
+from app.schemas import GatewayConfigUpdate, SplitUpdate, VenueGatewayConfigUpdate
 from app.serializers import to_dict
-from app.services import gateway, gateway_config, payouts, split_engine
+from app.services import gateway, gateway_config, payouts, split_engine, venue_gateway
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
@@ -76,6 +76,119 @@ async def test_gateway_config(admin=Depends(require_admin)):
     config = await gateway_config.get_decrypted_secrets()
     result = await gateway.test_credentials(config)
     await gateway_config.record_test_result("OK" if result["ok"] else "FAILED")
+    return result
+
+
+# ------------------------------------------- venue gateway config (owner)
+async def _owned_venue(venue_id: str, user):
+    """Return the venue if the caller may manage it, else raise."""
+    venue = await db.venue.find_unique(where={"id": venue_id})
+    if venue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue not found")
+    if user.role != Role.ADMIN and venue.ownerId != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your venue")
+    return venue
+
+
+def _venue_gateway_view(config, secrets: dict | None) -> dict:
+    if config is None:
+        return {
+            "configured": False,
+            "isActive": False,
+            "provider": GatewayProvider.RAZORPAY,
+            "apiKey": "",
+            "secretKeyMasked": "",
+            "webhookSecretMasked": "",
+            "webhookUrl": "",
+            "platformAccountId": "",
+            "hasSecretKey": False,
+            "hasWebhookSecret": False,
+            "lastTestedAt": None,
+            "lastTestStatus": None,
+        }
+    secrets = secrets or {}
+    return {
+        "configured": True,
+        "isActive": config.isActive,
+        "provider": config.provider,
+        "apiKey": config.apiKey,
+        "secretKeyMasked": mask(secrets.get("secret_key", "")),
+        "webhookSecretMasked": mask(secrets.get("webhook_secret", "")),
+        "webhookUrl": config.webhookUrl or settings.webhook_url,
+        "platformAccountId": config.platformAccountId or "",
+        "hasSecretKey": bool(secrets.get("secret_key")),
+        "hasWebhookSecret": bool(secrets.get("webhook_secret")),
+        "lastTestedAt": config.lastTestedAt.isoformat() if config.lastTestedAt else None,
+        "lastTestStatus": config.lastTestStatus,
+    }
+
+
+@router.get("/venue-gateway/{venue_id}")
+async def get_venue_gateway(venue_id: str, user=Depends(require_owner_or_admin)):
+    await _owned_venue(venue_id, user)
+    config = await venue_gateway.get_config(venue_id)
+    secrets = await venue_gateway.get_decrypted_secrets(venue_id) if config else None
+    return _venue_gateway_view(config, secrets)
+
+
+@router.put("/venue-gateway/{venue_id}")
+async def update_venue_gateway(
+    venue_id: str,
+    payload: VenueGatewayConfigUpdate,
+    user=Depends(require_owner_or_admin),
+):
+    venue = await _owned_venue(venue_id, user)
+    if payload.provider and payload.provider not in GatewayProvider.ALL:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unsupported provider")
+
+    await venue_gateway.upsert_config(
+        venue_id,
+        venue.ownerId,
+        provider=payload.provider,
+        api_key=payload.apiKey,
+        secret_key=payload.secretKey or None,
+        webhook_secret=payload.webhookSecret or None,
+        webhook_url=payload.webhookUrl or None,
+        platform_account_id=payload.platformAccountId or None,
+        is_active=payload.isActive,
+    )
+    await db.auditlog.create(
+        data={
+            "actorId": user.id,
+            "action": "VENUE_GATEWAY_CONFIG_UPDATED",
+            "entity": "venue_gateway_config",
+            "entityId": venue_id,
+            "details": f"provider={payload.provider or 'unchanged'} active={payload.isActive}",
+        }
+    )
+    return await get_venue_gateway(venue_id, user)
+
+
+@router.delete("/venue-gateway/{venue_id}")
+async def delete_venue_gateway(venue_id: str, user=Depends(require_owner_or_admin)):
+    await _owned_venue(venue_id, user)
+    existing = await venue_gateway.get_config(venue_id)
+    if existing is not None:
+        await venue_gateway.delete_config(venue_id)
+    await db.auditlog.create(
+        data={
+            "actorId": user.id,
+            "action": "VENUE_GATEWAY_CONFIG_REMOVED",
+            "entity": "venue_gateway_config",
+            "entityId": venue_id,
+        }
+    )
+    return {"ok": True}
+
+
+@router.post("/venue-gateway/{venue_id}/test")
+async def test_venue_gateway(venue_id: str, user=Depends(require_owner_or_admin)):
+    await _owned_venue(venue_id, user)
+    secrets = await venue_gateway.get_decrypted_secrets(venue_id)
+    if secrets is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active gateway configured for this venue")
+    result = await venue_gateway.test_credentials(secrets)
+    await venue_gateway.record_test_result(venue_id, "OK" if result["ok"] else "FAILED")
     return result
 
 

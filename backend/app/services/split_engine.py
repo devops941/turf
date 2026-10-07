@@ -47,12 +47,22 @@ def compute_split(amount: float, split_pct: float) -> tuple[float, float]:
 
 
 async def set_global_split(percentage: float, changed_by: str | None, note: str | None = None):
-    # Deactivate previous global rows so history is preserved but only the
-    # newest global setting is "active".
-    await db.splitsetting.update_many(
-        where={"scope": SplitScope.GLOBAL, "isActive": True},
-        data={"isActive": False},
+    # `venueId` is unique (and null for global rows), so only one global row can
+    # exist: reactivate and update it rather than inserting a duplicate.
+    existing = await db.splitsetting.find_first(
+        where={"scope": SplitScope.GLOBAL}, order={"effectiveFrom": "desc"}
     )
+    if existing is not None:
+        return await db.splitsetting.update(
+            where={"id": existing.id},
+            data={
+                "percentage": percentage,
+                "effectiveFrom": _now(),
+                "isActive": True,
+                "changedBy": changed_by,
+                "note": note,
+            },
+        )
     return await db.splitsetting.create(
         data={
             "scope": SplitScope.GLOBAL,
@@ -68,10 +78,21 @@ async def set_global_split(percentage: float, changed_by: str | None, note: str 
 async def set_venue_split(
     venue_id: str, percentage: float, changed_by: str | None, note: str | None = None
 ):
-    await db.splitsetting.update_many(
-        where={"scope": SplitScope.VENUE, "venueId": venue_id, "isActive": True},
-        data={"isActive": False},
-    )
+    # `venueId` is unique, so a venue has at most one split row: reactivate and
+    # update it rather than inserting a duplicate.
+    existing = await db.splitsetting.find_unique(where={"venueId": venue_id})
+    if existing is not None:
+        return await db.splitsetting.update(
+            where={"id": existing.id},
+            data={
+                "scope": SplitScope.VENUE,
+                "percentage": percentage,
+                "effectiveFrom": _now(),
+                "isActive": True,
+                "changedBy": changed_by,
+                "note": note,
+            },
+        )
     return await db.splitsetting.create(
         data={
             "scope": SplitScope.VENUE,

@@ -119,6 +119,18 @@ class GatewayConfigUpdate(BaseModel):
     webhookUrl: str | None = None
 
 
+class VenueGatewayConfigUpdate(BaseModel):
+    """A venue owner's own gateway credentials (self-serve)."""
+
+    provider: Literal["RAZORPAY", "STRIPE", "CASHFREE", "SANDBOX"] | None = None
+    apiKey: str | None = None
+    secretKey: str | None = None
+    webhookSecret: str | None = None
+    webhookUrl: str | None = None
+    platformAccountId: str | None = None
+    isActive: bool | None = None
+
+
 class SplitUpdate(BaseModel):
     percentage: float = Field(ge=0, le=100)
     scope: Literal["GLOBAL", "VENUE"] = "GLOBAL"

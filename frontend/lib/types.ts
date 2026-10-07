@@ -113,6 +113,11 @@ export interface GatewayConfigView {
   hasWebhookSecret: boolean;
 }
 
+export interface VenueGatewayConfigView extends GatewayConfigView {
+  configured: boolean;
+  platformAccountId: string;
+}
+
 export interface SplitOverride {
   id: string;
   venueId?: string | null;
