@@ -36,6 +36,9 @@
   --shadow-lift: 0 12px 32px -12px rgba(16, 24, 40, 0.28);
 
   --animate-fade-up: fade-up 0.35s ease-out both;
+  --animate-marquee: marquee 32s linear infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
 }
 
 @keyframes fade-up {
@@ -46,6 +49,39 @@
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(-1.5deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -104,6 +140,24 @@ body {
   }
   .table-cell {
     @apply px-4 py-3 text-sm text-slate-700 border-t border-slate-100;
+  }
+  .card-hover {
+    @apply transition duration-300 hover:-translate-y-1 hover:shadow-lift hover:border-brand-100;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-float,
+  .animate-fade-up {
+    animation: none !important;
   }
 }
 
